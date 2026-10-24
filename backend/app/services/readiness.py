@@ -27,17 +27,25 @@ def _image_features(image: np.ndarray) -> tuple[list[cv2.KeyPoint], np.ndarray |
     return keypoints, descriptors
 
 
-def _pair_match(left: np.ndarray | None, right: np.ndarray | None) -> dict[str, Any]:
-    if left is None or right is None or len(left) < 2 or len(right) < 2:
+def _pair_match(
+    left_keypoints: list[cv2.KeyPoint],
+    left_descriptors: np.ndarray | None,
+    right_keypoints: list[cv2.KeyPoint],
+    right_descriptors: np.ndarray | None,
+) -> dict[str, Any]:
+    if (
+        left_descriptors is None or right_descriptors is None
+        or len(left_descriptors) < 2 or len(right_descriptors) < 2
+    ):
         return {"matched": False, "good_matches": 0, "inliers": 0, "inlier_ratio": 0.0}
     matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
-    pairs = matcher.knnMatch(left, right, k=2)
+    pairs = matcher.knnMatch(left_descriptors, right_descriptors, k=2)
     good = [pair[0] for pair in pairs if len(pair) == 2 and pair[0].distance < 0.75 * pair[1].distance]
     inliers = 0
     ratio = 0.0
     if len(good) >= 8:
-        source = np.float32([left[match.queryIdx].pt for match in good]).reshape(-1, 1, 2)
-        target = np.float32([right[match.trainIdx].pt for match in good]).reshape(-1, 1, 2)
+        source = np.float32([left_keypoints[match.queryIdx].pt for match in good]).reshape(-1, 1, 2)
+        target = np.float32([right_keypoints[match.trainIdx].pt for match in good]).reshape(-1, 1, 2)
         try:
             _, mask = cv2.findHomography(source, target, cv2.RANSAC, 4.0)
             if mask is not None:
@@ -83,7 +91,7 @@ def analyze_batch(
 ) -> dict[str, Any]:
     """Analyze an ordered image batch and return per-image and pairwise signals."""
     records: list[dict[str, Any]] = []
-    descriptors: list[np.ndarray | None] = []
+    features: list[tuple[list[cv2.KeyPoint], np.ndarray | None]] = []
     hashes: dict[str, int] = {}
 
     for index, (filename, content, original_dimensions) in enumerate(uploads):
@@ -103,7 +111,7 @@ def analyze_batch(
         duplicate_of = hashes.get(digest)
         hashes.setdefault(digest, index)
         keypoints, image_descriptors = _image_features(image)
-        descriptors.append(image_descriptors)
+        features.append((keypoints, image_descriptors))
 
         issues: list[str] = []
         if original_width < MIN_WIDTH or original_height < MIN_HEIGHT:
@@ -137,9 +145,9 @@ def analyze_batch(
 
     pair_results: list[dict[str, Any]] = []
     edges: list[tuple[int, int]] = []
-    for left in range(len(descriptors)):
-        for right in range(left + 1, len(descriptors)):
-            match = _pair_match(descriptors[left], descriptors[right])
+    for left in range(len(features)):
+        for right in range(left + 1, len(features)):
+            match = _pair_match(*features[left], *features[right])
             pair_results.append({"left": left, "right": right, **match})
             if match["matched"]:
                 edges.append((left, right))

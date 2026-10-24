@@ -121,10 +121,12 @@ def _write_state(directory: Path, state: dict[str, Any]) -> None:
 
 def _command(executable: str, arguments: list[str]) -> list[str]:
     if os.name == "nt" and executable.lower().endswith((".bat", ".cmd")):
-        import subprocess as sp
+        def ps_literal(value: str) -> str:
+            return "'" + value.replace("'", "''") + "'"
 
-        command_line = sp.list2cmdline([executable, *arguments])
-        return [os.environ.get("COMSPEC", "cmd.exe"), "/d", "/s", "/c", command_line]
+        command_line = "& " + " ".join(ps_literal(value) for value in [executable, *arguments])
+        command_line += "; exit $LASTEXITCODE"
+        return ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command_line]
     return [executable, *arguments]
 
 
