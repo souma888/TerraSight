@@ -30,6 +30,8 @@
   let orientationEnabled = false;
   let toastTimer = null;
   let qualityReviewed = false;
+  let sessionId = null;
+  let latestAnalysis = null;
 
   const $ = (selector) => document.querySelector(selector);
 
@@ -111,25 +113,30 @@
   function updateQuality() {
     const count = photos.length;
     const large = photos.filter((photo) => photo.width >= 1280 && photo.height >= 720).length;
-    const overlaps = photos.slice(1).map((photo) => photo.overlap).filter((value) => value != null);
-    const average = overlaps.length ? Math.round(overlaps.reduce((sum, value) => sum + value, 0) / overlaps.length) : null;
     $('#quality-count').innerHTML = count + ' <small>/ ' + MIN_PHOTOS + ' suggested</small>';
     $('#quality-resolution').textContent = count ? large + ' / ' + count : '—';
-    $('#quality-overlap').textContent = average == null ? '—' : average + '%';
     $('#quality-count-bar').style.width = Math.min(100, count / MIN_PHOTOS * 100) + '%';
     $('#quality-resolution-bar').style.width = count ? (large / count * 100) + '%' : '0%';
-    $('#quality-overlap-bar').style.width = average == null ? '0%' : Math.min(100, average) + '%';
+    const matching = latestAnalysis && latestAnalysis.feature_matching;
+    const matchedRatio = matching ? matching.matched_view_ratio : null;
+    $('#quality-overlap').textContent = matchedRatio == null ? 'Run check' : matching.largest_matched_group + ' / ' + count + ' linked';
+    $('#quality-overlap-bar').style.width = matchedRatio == null ? '0%' : Math.round(matchedRatio * 100) + '%';
+    $('#feature-connectivity-note').textContent = matching
+      ? matching.matched_pairs + ' of ' + matching.total_pairs + ' image pairs matched; ' + matching.connected_components + ' connected group(s).'
+      : 'OpenCV matches distinctive features across images and checks their geometric consistency.';
     $('#check-count').classList.toggle('is-good', count >= MIN_PHOTOS);
     $('#check-resolution').classList.toggle('is-good', count > 0 && large >= Math.min(3, count));
-    $('#check-overlap').classList.toggle('is-good', average != null && average >= TARGET_OVERLAP);
+    $('#check-overlap').classList.toggle('is-good', matchedRatio != null && matchedRatio >= 0.7);
     $('#check-count').classList.toggle('is-caution', count < MIN_PHOTOS);
     $('#check-resolution').classList.toggle('is-caution', count > 0 && large < Math.min(3, count));
-    $('#check-overlap').classList.toggle('is-caution', average != null && average < TARGET_OVERLAP);
-    $('#quality-title').textContent = count === 0 ? 'Your review is waiting.' : count >= MIN_PHOTOS && large >= Math.min(3, count) && average != null && average >= TARGET_OVERLAP ? 'Your image set is looking promising.' : 'Your capture set is taking shape.';
+    $('#check-overlap').classList.toggle('is-caution', matchedRatio != null && matchedRatio < 0.7);
+    $('#quality-title').textContent = latestAnalysis ? latestAnalysis.summary : count === 0 ? 'Your review is waiting.' : 'Your capture set is taking shape.';
     $('#check-count').querySelector('.check-status').textContent = count >= MIN_PHOTOS ? 'Minimum reached' : 'Add more views';
     $('#check-resolution').querySelector('.check-status').textContent = count ? (large >= Math.min(3, count) ? 'Suitable dimensions' : 'Use larger images') : 'Awaiting images';
-    $('#check-overlap').querySelector('.check-status').textContent = average == null ? 'Add sequential views' : average >= TARGET_OVERLAP ? 'Target ≥70%' : 'Aim for ≥70%';
-    $('#quality-summary').textContent = count === 0 ? 'Add images to see a live assessment of this survey.' : qualityReviewed ? 'Review based on images currently in this session. Browser-side estimate only.' : 'Live preview from images in this session. Run a review for a fuller assessment.';
+    $('#check-overlap').querySelector('.check-status').textContent = matchedRatio == null ? 'Run server check' : matchedRatio >= 0.7 ? 'Views connected' : 'Add intermediate views';
+    $('#quality-summary').textContent = latestAnalysis
+      ? latestAnalysis.feedback.join(' ')
+      : count === 0 ? 'Add images to run quality checks and feature matching on the server.' : 'Image counts and dimensions are local previews. Run a server check for image quality and feature matching.';
   }
 
   function decodeImage(file) {
@@ -233,7 +240,7 @@
       card.classList.add('low');
       return;
     }
-    value.textContent = result.percent + '% estimated';
+    value.textContent = result.percent + '% frame similarity';
     bar.style.width = result.percent + '%';
     if (result.percent < TARGET_OVERLAP) card.classList.add('low');
   }
@@ -318,6 +325,9 @@
 
   function resetReadiness() {
     qualityReviewed = false;
+    latestAnalysis = null;
+    $('#readiness-results').hidden = true;
+    updateQuality();
     const box = $('#readiness-box');
     box.classList.remove('is-ready', 'is-warning');
     $('#readiness-icon').textContent = '✳';
@@ -516,34 +526,106 @@
     resetReadiness();
   }
 
-  function checkReadiness() {
+  async function getSessionId() {
+    if (sessionId) return sessionId;
+    try { sessionId = sessionStorage.getItem('terrasight-session-id'); } catch { /* Private browsing may block storage. */ }
+    if (sessionId) return sessionId;
+    const response = await fetch('/api/sessions', { method: 'POST', headers: { Accept: 'application/json' } });
+    const result = await response.json();
+    if (!response.ok || !result.session_id) throw new Error(result.detail || 'Could not start a processing session.');
+    sessionId = result.session_id;
+    try { sessionStorage.setItem('terrasight-session-id', sessionId); } catch { /* The active page retains the ID in memory. */ }
+    return sessionId;
+  }
+
+  function canvasBlob(canvas, quality) {
+    return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not prepare an image for upload.')), 'image/jpeg', quality));
+  }
+
+  async function prepareAnalysisBatch() {
+    const presets = [[0.76, 1600], [0.64, 1280], [0.52, 1024], [0.44, 800]];
+    for (const [quality, maxEdge] of presets) {
+      const encoded = [];
+      let total = 0;
+      for (const photo of photos) {
+        const bitmap = await decodeImage(photo.file);
+        const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext('2d', { alpha: false }).drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        if (typeof bitmap.close === 'function') bitmap.close();
+        const blob = await canvasBlob(canvas, quality);
+        total += blob.size;
+        encoded.push(blob);
+      }
+      if (total <= 3_800_000) return encoded;
+    }
+    throw new Error('This image set is too large to send as one Vercel request. Remove some images and run the check again.');
+  }
+
+  function renderReadinessDetails(result) {
+    const grid = $('#readiness-view-list');
+    grid.replaceChildren();
+    for (const view of result.views) {
+      const row = document.createElement('article');
+      row.className = 'readiness-view-row';
+      const heading = document.createElement('div'); heading.className = 'readiness-view-heading';
+      const name = document.createElement('strong'); name.textContent = 'View ' + String(view.index + 1).padStart(2, '0') + ' · ' + view.filename;
+      const status = document.createElement('span'); status.className = view.quality === 'good' ? 'result-good' : 'result-review'; status.textContent = view.quality === 'good' ? 'LOOKS GOOD' : 'REVIEW';
+      heading.append(name, status);
+      const metrics = document.createElement('p');
+      metrics.textContent = view.width + ' × ' + view.height + ' px · sharpness ' + view.blur_score + ' · ' + view.feature_count + ' features' + (view.duplicate_of == null ? '' : ' · duplicate of view ' + (view.duplicate_of + 1));
+      row.append(heading, metrics);
+      if (view.issues.length) {
+        const issues = document.createElement('ul');
+        view.issues.forEach((message) => { const item = document.createElement('li'); item.textContent = message; issues.append(item); });
+        row.append(issues);
+      }
+      grid.append(row);
+    }
+    $('#readiness-limits').textContent = result.limitations.join(' ');
+    $('#readiness-results').hidden = false;
+  }
+
+  async function checkReadiness() {
     if (!photos.length) return;
-    const box = $('#readiness-box');
-    const count = photos.length;
-    const largeEnough = photos.filter((photo) => photo.width >= 1280 && photo.height >= 720).length;
-    const overlaps = photos.slice(1).map((photo) => photo.overlap).filter((value) => value != null);
-    const averageOverlap = overlaps.length ? Math.round(overlaps.reduce((sum, value) => sum + value, 0) / overlaps.length) : null;
-    const resolutionOk = largeEnough >= Math.min(3, count);
-    const overlapOk = averageOverlap != null && averageOverlap >= TARGET_OVERLAP;
-    const countOk = count >= MIN_PHOTOS;
-    const ready = countOk && resolutionOk && overlapOk;
-    qualityReviewed = true;
-    updateQuality();
-    const caution = countOk && resolutionOk && averageOverlap != null;
-    box.classList.toggle('is-ready', ready);
-    box.classList.toggle('is-warning', !ready);
-    $('#readiness-icon').textContent = ready ? '✓' : '!';
-    $('#readiness-title').textContent = ready ? 'Capture set looks promising' : caution ? 'Review the capture coverage' : 'A few more views needed';
-    const details = [];
-    details.push(countOk ? count + ' views collected' : 'Need ' + Math.max(0, MIN_PHOTOS - count) + ' more views');
-    details.push(largeEnough + ' high-resolution');
-    details.push(averageOverlap == null ? 'overlap could not be estimated reliably' : averageOverlap + '% average estimated overlap');
-    $('#readiness-detail').textContent = details.join(' · ') + '. Browser-side screening only; reconstruction quality is not verified.';
-    notify(ready ? 'Initial capture checks passed. This does not confirm 3D reconstruction quality.' : 'Capture check complete. Review the items shown in the session panel.');
+    const buttons = [$('#check-readiness'), $('#run-quality-check')];
+    buttons.forEach((button) => { button.disabled = true; button.dataset.label = button.textContent; button.textContent = 'Analyzing images…'; });
+    $('#readiness-title').textContent = 'Analyzing image batch';
+    $('#readiness-detail').textContent = 'Preparing images and checking quality and feature connectivity.';
+    try {
+      const [id, encoded] = await Promise.all([getSessionId(), prepareAnalysisBatch()]);
+      const form = new FormData();
+      encoded.forEach((blob, index) => form.append('files', blob, 'view-' + String(index + 1).padStart(2, '0') + '.jpg'));
+      form.append('original_dimensions', JSON.stringify(photos.map((photo) => ({ width: photo.width, height: photo.height }))));
+      const response = await fetch('/api/sessions/' + encodeURIComponent(id) + '/readiness', { method: 'POST', body: form, headers: { Accept: 'application/json' } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof result.detail === 'string' ? result.detail : 'Image analysis failed with status ' + response.status + '.');
+      latestAnalysis = result;
+      qualityReviewed = true;
+      updateQuality();
+      renderReadinessDetails(result);
+      const ready = result.ready;
+      $('#readiness-box').classList.toggle('is-ready', ready);
+      $('#readiness-box').classList.toggle('is-warning', !ready);
+      $('#readiness-icon').textContent = ready ? '✓' : '!';
+      $('#readiness-title').textContent = result.summary;
+      $('#readiness-detail').textContent = result.feedback.join(' ');
+      notify(ready ? 'The image set looks promising for a reconstruction attempt.' : 'Readiness check complete. Follow the feedback before reconstruction.');
+    } catch (error) {
+      $('#readiness-box').classList.add('is-warning');
+      $('#readiness-title').textContent = 'Could not complete the quality check';
+      $('#readiness-detail').textContent = error.message || 'The API could not analyze this image set.';
+      notify(error.message || 'The API could not analyze this image set.');
+    } finally {
+      buttons.forEach((button) => { button.textContent = button.dataset.label || 'Review quality'; delete button.dataset.label; });
+      renderPhotos();
+    }
   }
 
   function startReconstruction() {
-    notify('The 3D reconstruction service is not connected yet. Photos remain on this device and have not been sent.');
+    notify('The 3D reconstruction service is not connected yet. This action does not submit or reconstruct the photos.');
   }
 
   function crc32(bytes) {

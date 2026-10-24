@@ -9,9 +9,9 @@ Flexible timeline; milestones are defined by usable evidence and deliverables ra
 
 ## 2. Capture Readiness Checker
 
-- Batch image upload, file/resolution checks, blur and exposure checks, duplicate detection, initial feature matching.
-- Return an explainable readiness assessment and identify likely gaps.
-- Deliverable: upload-to-readiness workflow, including unsuitable image examples.
+- [x] Batch image upload, file/resolution checks, blur and exposure checks, duplicate detection, initial feature matching.
+- [x] Return an explainable readiness assessment and identify likely gaps.
+- [x] Deliverable: upload-to-readiness workflow with per-image feedback and a feature connectivity graph.
 
 ## 3. Reconstruction engine
 

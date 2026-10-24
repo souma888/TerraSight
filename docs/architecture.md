@@ -9,10 +9,11 @@ Browser (desktop upload or mobile capture)
         |
         v
 FastAPI application
-  |-- session and upload endpoints (planned)
-  |-- image validation service (planned)
-  |-- processing job interface (planned)
-  |-- results and report endpoints (planned)
+  |-- session correlation endpoint (implemented; stateless)
+  |-- batch readiness endpoint (implemented)
+  |-- image validation and OpenCV feature matching (implemented)
+  |-- reconstruction job interface (planned)
+  |-- results persistence and report endpoints (planned)
         |
         +--> local filesystem for image and generated artifacts (initially)
         +--> SQLite for session/job metadata (when persistence is added)
@@ -36,10 +37,10 @@ These are architectural candidates, not dependencies required by the starter app
 
 ## Data flow
 
-1. **Capture input:** accept an existing image batch or collect images in a mobile browser. The initial interface is a shell; upload and camera features are not implemented yet.
-2. **Input checks:** validate readable formats, resolution, duplicates, blur, exposure, contrast, and detail.
-3. **Coverage assessment:** match features across views, assess connected image groups and viewpoint diversity, and communicate likely gaps. Image count alone is not a coverage metric.
-4. **Readiness response:** return a status such as ready, needs more images, or likely unsuitable, with reasons and confidence limits.
+1. **Capture input:** select an image batch or collect images in the mobile browser. The browser converts the ordered batch to JPEG under the request-size budget and keeps original dimensions as metadata.
+2. **Input checks:** the FastAPI endpoint validates batch count, size, format and decodability, then screens resolution, blur, exposure, contrast, exact duplicates and feature count.
+3. **Feature connectivity:** ORB descriptors are matched pairwise with a ratio test and RANSAC homography check; the API returns matched pairs and connected image groups. This is a screening proxy, not a percentage measurement of scene overlap.
+4. **Readiness response:** return `ready_to_attempt`, `needs_more_images`, or `needs_review`, per-view findings, likely gaps and limitations. The session ID is a correlation key only; request data and results are not stored by the API.
 5. **Reconstruction:** estimate camera poses and geometry; report registration failures, sparse regions, holes, and scale confidence.
 6. **Segmentation and geometry:** evaluate image masks independently, then map masks onto reconstructed geometry where correspondence is supported.
 7. **Measurements:** compute only supported lengths/surface measures. Volume needs a scale and defensible reference surface; withhold it if quality checks fail.
@@ -47,7 +48,7 @@ These are architectural candidates, not dependencies required by the starter app
 
 ## Processing and deployment boundary
 
-Develop and benchmark locally on the Windows PC with the RTX 4050. Keep API request/response contracts independent of where jobs run. A local processing service is appropriate for early demos. Public use will need an accessible worker/service or a documented local-processing mode; a static public website cannot access files on a developer's PC. Benchmark CPU/GPU time, memory, storage, concurrent jobs, and hosting cost before selecting public infrastructure.
+The readiness endpoint runs synchronously and keeps processing arrays/descriptors in invocation memory only. Vercel Functions have a 4.5 MB request-body limit; the frontend targets a smaller 3.8 MB encoded-image budget and the API caps image bytes at 4,000,000 per request. Large surveys need a direct-to-storage or chunked job flow before expanding the batch size. Reconstruction is long-running and must move to a durable worker/job system before it is connected to the public UI. Keep API request/response contracts independent of where jobs run. Benchmark CPU time, memory, concurrency, and hosting cost before selecting public infrastructure.
 
 ## Quality and safety requirements
 
