@@ -15,9 +15,12 @@ Flexible timeline; milestones are defined by usable evidence and deliverables ra
 
 ## 3. Reconstruction engine
 
-- Integrate COLMAP, inspect camera registration and sparse point cloud, record failure reasons.
-- Define scale calibration and geometry quality checks against controlled reference scenes.
-- Deliverable: repeatable reconstruction run and quantitative geometry report.
+- [x] Integrate COLMAP SIFT extraction, pair matching/geometric verification, incremental mapping and camera registration on the local worker.
+- [x] Export sparse point cloud and camera/reprojection diagnostics; optionally run dense CUDA MVS fusion.
+- [x] Add camera-baseline scale calibration with independent validation checks and separate metric PLY output.
+- [ ] Benchmark/validate against controlled terrain reference scenes and measured geometry before interpreting results.
+- [ ] Connect a persistent, authenticated reconstruction worker to the public deployment.
+- Deliverable: repeatable local SfM/MVS run and an explainable camera/point-cloud report; no survey accuracy claim until held-out validation is complete.
 
 ## 4. Guided mobile capture
 

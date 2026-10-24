@@ -2,6 +2,7 @@
   'use strict';
 
   const MIN_PHOTOS = 5;
+  const MIN_RECONSTRUCTION_PHOTOS = 8;
   const TARGET_OVERLAP = 70;
   const SAMPLE_W = 48;
   const SAMPLE_H = 32;
@@ -32,6 +33,8 @@
   let qualityReviewed = false;
   let sessionId = null;
   let latestAnalysis = null;
+  let reconstructionCapabilities = { available: false, reason: 'Checking local COLMAP worker.' };
+  let currentReconstructionJob = null;
 
   const $ = (selector) => document.querySelector(selector);
 
@@ -48,6 +51,24 @@
       $('#api-status').textContent = 'API unavailable';
       pill.classList.add('is-offline');
     }
+  }
+
+  async function checkReconstructionCapabilities() {
+    const badge = $('#reconstruction-engine-badge');
+    const message = $('#reconstruction-capability');
+    try {
+      const response = await fetch('/api/reconstructions/capabilities', { headers: { Accept: 'application/json' } });
+      const result = await response.json();
+      reconstructionCapabilities = result;
+      badge.innerHTML = '<i></i> ' + (result.available ? 'COLMAP WORKER READY' : 'LOCAL WORKER REQUIRED');
+      badge.classList.toggle('worker-ready', Boolean(result.available));
+      message.textContent = result.reason;
+    } catch {
+      reconstructionCapabilities = { available: false, reason: 'Could not check the local COLMAP worker.' };
+      badge.textContent = 'WORKER UNAVAILABLE';
+      message.textContent = reconstructionCapabilities.reason;
+    }
+    $('#reconstruct-button').disabled = !reconstructionCapabilities.available || photos.length < MIN_RECONSTRUCTION_PHOTOS;
   }
 
   function notify(message) {
@@ -275,7 +296,7 @@
     $('#clear-photos').hidden = count === 0;
     $('#check-readiness').disabled = count === 0;
     $('#run-quality-check').disabled = count === 0;
-    $('#reconstruct-button').disabled = count < MIN_PHOTOS;
+    $('#reconstruct-button').disabled = !reconstructionCapabilities.available || count < MIN_RECONSTRUCTION_PHOTOS;
     document.querySelector('#download-set').disabled = count === 0;
     $('#nav-photo-count').textContent = String(count);
     $('#heading-session-status').textContent = count ? count + (count === 1 ? ' view captured' : ' views captured') : 'Waiting for images';
@@ -625,7 +646,161 @@
   }
 
   function startReconstruction() {
-    notify('The 3D reconstruction service is not connected yet. This action does not submit or reconstruct the photos.');
+    if (!reconstructionCapabilities.available) {
+      notify(reconstructionCapabilities.reason || 'A local COLMAP worker is required.');
+      return;
+    }
+    const supported = photos.filter((photo) => ['image/jpeg', 'image/png'].includes(photo.file.type));
+    if (supported.length !== photos.length) {
+      notify('Reconstruction needs original JPEG or PNG files. Replace WebP/HEIC images with JPEG/PNG originals.');
+      return;
+    }
+    if (photos.length < MIN_RECONSTRUCTION_PHOTOS) {
+      notify('Add at least ' + MIN_RECONSTRUCTION_PHOTOS + ' original views before reconstruction.');
+      return;
+    }
+    submitReconstruction();
+  }
+
+  function addDownloadLink(container, jobId, name, label) {
+    const link = document.createElement('a');
+    link.className = 'button button-outline';
+    link.href = '/api/reconstructions/' + encodeURIComponent(jobId) + '/artifacts/' + encodeURIComponent(name);
+    link.textContent = label;
+    container.append(link);
+  }
+
+  function renderReconstruction(job) {
+    $('#reconstruction-progress').hidden = false;
+    $('#reconstruction-stage').textContent = job.stage || job.status;
+    $('#reconstruction-percent').textContent = (job.progress_percent || 0) + '%';
+    $('#reconstruction-progress-bar').style.width = (job.progress_percent || 0) + '%';
+    $('#reconstruction-message').textContent = job.error || job.dense_error || (job.status === 'queued' || job.status === 'running' ? 'COLMAP is processing full-resolution images on this device. This can take a while.' : '');
+    const output = $('#reconstruction-output');
+    $('#delete-reconstruction').hidden = !job.job_id || ['queued', 'running'].includes(job.status);
+    if (!['completed', 'completed_sparse'].includes(job.status) || !job.summary) {
+      output.hidden = true;
+      if (job.status === 'failed') notify(job.error || 'COLMAP reconstruction failed.');
+      return;
+    }
+    output.hidden = false;
+    const summary = job.summary;
+    $('#reconstruction-title').textContent = job.status === 'completed' ? 'Reconstruction complete' : 'Sparse reconstruction complete';
+    $('#reconstruction-registered').textContent = summary.registered_images + ' / ' + summary.input_images;
+    $('#reconstruction-points').textContent = Number(summary.sparse_point_count).toLocaleString();
+    $('#reconstruction-error').textContent = summary.median_reprojection_error_px == null ? '—' : summary.median_reprojection_error_px + ' px';
+    $('#reconstruction-fraction').textContent = Math.round(summary.registration_fraction * 100) + '%';
+    const flags = $('#reconstruction-flags');
+    flags.replaceChildren();
+    (summary.quality_flags || []).forEach((text) => { const item = document.createElement('li'); item.textContent = text; flags.append(item); });
+    if (job.dense_error) { const item = document.createElement('li'); item.textContent = 'Dense output unavailable: ' + job.dense_error; flags.append(item); }
+    const downloads = $('#reconstruction-downloads');
+    downloads.replaceChildren();
+    addDownloadLink(downloads, job.job_id, 'sparse.ply', 'Download sparse point cloud');
+    if (summary.dense_point_cloud) addDownloadLink(downloads, job.job_id, 'dense.ply', 'Download dense point cloud');
+    addDownloadLink(downloads, job.job_id, 'camera-positions.csv', 'Camera registration report');
+    addDownloadLink(downloads, job.job_id, 'diagnostics.json', 'Reconstruction diagnostics');
+    $('#scale-validation').hidden = false;
+    $('#scale-template-link').href = '/api/reconstructions/' + encodeURIComponent(job.job_id) + '/scale-template.csv';
+    currentReconstructionJob = job.job_id;
+  }
+
+  async function pollReconstruction(jobId) {
+    currentReconstructionJob = jobId;
+    for (;;) {
+      const response = await fetch('/api/reconstructions/' + encodeURIComponent(jobId), { headers: { Accept: 'application/json' } });
+      const job = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(job.detail || 'Could not read reconstruction job status.');
+      renderReconstruction(job);
+      if (!['queued', 'running'].includes(job.status)) return job;
+      await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    }
+  }
+
+  async function submitReconstruction() {
+    const button = $('#reconstruct-button');
+    const progress = $('#reconstruction-progress');
+    const output = $('#reconstruction-output');
+    button.disabled = true;
+    progress.hidden = false;
+    output.hidden = true;
+    $('#reconstruction-stage').textContent = 'Uploading original photos';
+    $('#reconstruction-percent').textContent = '0%';
+    $('#reconstruction-progress-bar').style.width = '0%';
+    $('#reconstruction-message').textContent = 'Original images are sent only to the configured local worker.';
+    try {
+      const form = new FormData();
+      photos.forEach((photo, index) => form.append('images', photo.file, 'view-' + String(index + 1).padStart(3, '0') + (photo.file.type === 'image/png' ? '.png' : '.jpg')));
+      form.append('dense', $('#build-dense').checked ? 'true' : 'false');
+      const response = await fetch('/api/reconstructions', { method: 'POST', body: form, headers: { Accept: 'application/json' } });
+      const job = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(job.detail || 'Could not start reconstruction.');
+      currentReconstructionJob = job.job_id;
+      sessionStorage.setItem('terraSightReconstructionJob', job.job_id);
+      await pollReconstruction(job.job_id);
+    } catch (error) {
+      $('#reconstruction-stage').textContent = 'Reconstruction unavailable';
+      $('#reconstruction-message').textContent = error.message || 'The local worker could not process these images.';
+      notify(error.message || 'The local worker could not process these images.');
+    } finally {
+      button.disabled = !reconstructionCapabilities.available || photos.length < MIN_RECONSTRUCTION_PHOTOS;
+    }
+  }
+
+  async function submitScaleValidation() {
+    const file = $('#scale-csv-file').files[0];
+    if (!file || !currentReconstructionJob) return;
+    const button = $('#validate-scale-button');
+    const resultNode = $('#scale-result');
+    button.disabled = true;
+    resultNode.textContent = 'Comparing measured baselines with reconstructed camera centers…';
+    try {
+      const form = new FormData();
+      form.append('baselines_csv', file, file.name);
+      const response = await fetch('/api/reconstructions/' + encodeURIComponent(currentReconstructionJob) + '/scale', { method: 'POST', body: form, headers: { Accept: 'application/json' } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || 'Scale validation failed.');
+      resultNode.textContent = (result.validated ? 'VALIDATED · ' : 'VALIDATION FAILED · ') + 'Scale ' + result.scale_meters_per_model_unit.toPrecision(5) + ' m/model unit. Independent checks: ' + result.independent_validation_baselines.map((item) => item.absolute_error_percent + '% error').join(', ') + '. ' + result.warning;
+      const links = $('#scale-downloads'); links.replaceChildren();
+      if (result.validated) for (const name of (result.scaled_point_clouds || [])) addDownloadLink(links, currentReconstructionJob, name, 'Download ' + name);
+      addDownloadLink(links, currentReconstructionJob, 'scale-validation.json', 'Scale validation report');
+    } catch (error) {
+      resultNode.textContent = error.message || 'Scale validation failed.';
+    } finally {
+      button.disabled = !$('#scale-csv-file').files.length;
+    }
+  }
+
+  async function restoreReconstructionJob() {
+    const jobId = sessionStorage.getItem('terraSightReconstructionJob');
+    if (!jobId || !reconstructionCapabilities.available) return;
+    currentReconstructionJob = jobId;
+    try {
+      await pollReconstruction(jobId);
+    } catch {
+      sessionStorage.removeItem('terraSightReconstructionJob');
+      currentReconstructionJob = null;
+    }
+  }
+
+  async function deleteReconstruction() {
+    if (!currentReconstructionJob || !window.confirm('Delete this reconstruction and its retained images, logs, and outputs from this device?')) return;
+    const button = $('#delete-reconstruction');
+    button.disabled = true;
+    try {
+      const response = await fetch('/api/reconstructions/' + encodeURIComponent(currentReconstructionJob), { method: 'DELETE' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.detail || 'Could not delete the reconstruction files.');
+      sessionStorage.removeItem('terraSightReconstructionJob');
+      currentReconstructionJob = null;
+      $('#reconstruction-progress').hidden = true;
+      $('#reconstruction-output').hidden = true;
+      notify('Reconstruction files deleted from this device.');
+    } catch (error) {
+      notify(error.message || 'Could not delete the reconstruction files.');
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function crc32(bytes) {
@@ -729,6 +904,9 @@
   $('#quality-resolution-bar').style.width = '0%';
   $('#quality-overlap-bar').style.width = '0%';
   $('#reconstruct-button').addEventListener('click', startReconstruction);
+  $('#scale-csv-file').addEventListener('change', () => { $('#validate-scale-button').disabled = !$('#scale-csv-file').files.length; });
+  $('#validate-scale-button').addEventListener('click', submitScaleValidation);
+  $('#delete-reconstruction').addEventListener('click', deleteReconstruction);
   document.querySelector('#download-set').addEventListener('click', downloadPhotoSet);
   window.addEventListener('pagehide', () => {
     stopCamera();
@@ -744,4 +922,5 @@
 
   renderPhotos();
   checkApi();
+  checkReconstructionCapabilities().then(restoreReconstructionJob);
 })();

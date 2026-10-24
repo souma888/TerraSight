@@ -43,7 +43,14 @@ If PowerShell blocks activation, run the server with the environment's interpret
 .\.venv\Scripts\python.exe -m uvicorn app.main:app --app-dir backend --reload
 ```
 
-The starter requirements intentionally cover only the API and basic image-processing foundation. Install PyTorch/CUDA and reconstruction tooling in a later, separately documented step after checking the target machine's compatible builds. No model, dataset, or COLMAP binary is bundled.
+Install the Python dependencies with `pip install -r requirements.txt`. COLMAP is a separate native application and is not installed by pip. On Windows, install a COLMAP binary (CUDA support is needed for dense stereo) and set its executable path before starting the API:
+
+```powershell
+$env:COLMAP_EXECUTABLE = 'C:\path\to\COLMAP.bat'
+uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+```
+
+The app's **3D Scene** page checks for the local COLMAP worker. Use the app at `http://127.0.0.1:8000`; a deployed Vercel function cannot run this local worker. See the [COLMAP Windows installation guide](https://colmap.github.io/install.html).
 
 ## Initial workflow
 
@@ -59,6 +66,10 @@ See [docs/architecture.md](docs/architecture.md), [docs/roadmap.md](docs/roadmap
 
 ## Current status
 
-The browser workspace supports selecting multiple terrain images, mobile camera capture, a local photo gallery and ZIP export. The Capture Quality view sends a compressed batch to FastAPI for temporary image checks (resolution, blur, exposure, contrast, texture and exact duplicates) and OpenCV ORB feature matching with a geometric-consistency check. It returns per-image findings, match connectivity and readiness feedback. The API does not retain uploaded images or analysis results; the session ID is a client correlation key. Vercel request size is limited, so the browser prepares a batch below 3.8 MB and the API accepts at most 4,000,000 bytes per batch. The checks screen for capture problems; they do not reconstruct a scene or verify true coverage, camera poses, scale, or measurement accuracy. The 3D preview is illustrative. Reconstruction, segmentation, quantitative validation and report generation remain future work.
+The browser workspace supports selecting multiple terrain images, mobile camera capture, a local photo gallery and ZIP export. The Capture Quality view sends a compressed batch to FastAPI for temporary image checks (resolution, blur, exposure, contrast, texture and exact duplicates) and OpenCV ORB feature matching with a geometric-consistency check. It returns per-image findings, match connectivity and readiness feedback. The API does not retain these quality-check uploads; the session ID is a client correlation key. The deployed Vercel service handles this small-batch check only. Vercel's request-body limit is 4.5 MB, so the browser prepares a batch below 3.8 MB and the API accepts at most 4,000,000 bytes per request.
 
-The API contract is documented in the FastAPI OpenAPI page at `/docs`. Create a correlation session with `POST /api/sessions`, then send an ordered `multipart/form-data` batch to `POST /api/sessions/{session_id}/readiness` using repeated `files` fields and an `original_dimensions` JSON field. Supported decoded formats are JPEG, PNG and WebP. The browser converts selected images to JPEG before sending them.
+The **local** reconstruction worker requires at least 8 original JPEG/PNG photos (up to 100; 20 MB each, 250 MB total) and runs COLMAP SIFT extraction, exhaustive matching with geometric verification, incremental camera registration/bundle adjustment, sparse point export, and optional CUDA PatchMatch stereo plus geometric fusion for a dense PLY. Full-resolution originals and outputs are retained under `data/processed/reconstructions/{job_id}` until the job is deleted through the UI or API. The scale workflow uses measured camera-center baselines: one calibrates the uniform scale, and at least two independent baselines must validate within 5% before metric PLY copies are produced. The point-cloud frame keeps COLMAP's arbitrary orientation and origin; this is not georeferencing. Use one camera and lens, capture sharp textured images with substantial overlap, and include viewpoint movement. A single image cannot provide 3D reconstruction.
+
+For a landslide surface, capture many overlapping views from stable ground using one camera and lens. Vegetation, moving material, repeated textures, strong shadows, or weak viewpoint change can prevent registration. Review the registration and reprojection report; no successful SfM run guarantees a complete or survey-grade model. Controlled terrain benchmarks, held-out geometry validation, segmentation, and a 3D viewer remain future work.
+
+The API contract is documented in the FastAPI OpenAPI page at `/docs`. Create a correlation session with `POST /api/sessions`, then send an ordered `multipart/form-data` batch to `POST /api/sessions/{session_id}/readiness` using repeated `files` fields and an `original_dimensions` JSON field. Supported decoded formats are JPEG, PNG and WebP. The browser converts selected images to JPEG before sending them. For reconstruction the browser checks `GET /api/reconstructions/capabilities`, submits original files to `POST /api/reconstructions`, polls the returned job ID, and downloads artifacts from its artifact routes. Scale validation accepts a baseline CSV at `POST /api/reconstructions/{job_id}/scale`.
