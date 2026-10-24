@@ -711,7 +711,7 @@
     addFiles(event.dataTransfer.files);
   });
   $('#clear-photos').addEventListener('click', clearPhotos);
-  $('#check-readiness').addEventListener('click', checkReadiness);
+  $('#check-readiness').addEventListener('click', () => { switchView('quality'); checkReadiness(); });
   $('#run-quality-check').addEventListener('click', checkReadiness);
   document.addEventListener('click', (event) => {
     const nav = event.target.closest('[data-nav]');
