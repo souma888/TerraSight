@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api.routes.health import router as health_router
+from backend.app.api.routes.health import router as health_router
 
 app = FastAPI(
     title="Terra Sight API",
