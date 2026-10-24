@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local data and generated processing outputs
+data/*
+!data/README.md
+!data/**/
+!data/**/.gitkeep
+runs/
+outputs/
+*.db
+*.sqlite3
+
+# COLMAP and reconstruction artifacts
+*.bin
+*.ply
+*.pcd
+*.las
+*.laz
+*.obj
+*.mtl
+*.glb
+*.gltf

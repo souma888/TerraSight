@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#17251f">
+    <meta name="description" content="Terra Sight turns terrain imagery into quality-checked 3D analysis.">
+    <title>Terra Sight — Terrain capture and analysis</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Terra Sight home">
+        <span class="brand-mark" aria-hidden="true">TS</span>
+        <span>Terra Sight</span>
+      </a>
+      <span class="status" id="api-status" role="status">Checking API…</span>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">Terrain capture · 3D reconstruction · measured results</p>
+        <h1>Understand the ground<br><span>from the images you capture.</span></h1>
+        <p class="intro">Terra Sight is being built to help assess terrain photo coverage, reconstruct a 3D scene, and report measurements with clear quality limits.</p>
+        <div class="actions">
+          <a class="button button-primary" href="#workflow">Explore the workflow</a>
+          <span class="phase-label">Project foundation · phase 1</span>
+        </div>
+      </section>
+
+      <section class="workflow" id="workflow" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Planned pipeline</p>
+          <h2 id="workflow-title">From capture to evidence</h2>
+        </div>
+        <ol class="steps">
+          <li><span class="step-number">01</span><h3>Capture or upload</h3><p>Use existing photos or follow guided capture in a mobile browser.</p></li>
+          <li><span class="step-number">02</span><h3>Check readiness</h3><p>Assess image quality, feature matches, viewpoint diversity, and likely coverage gaps.</p></li>
+          <li><span class="step-number">03</span><h3>Reconstruct</h3><p>Estimate camera poses and build terrain geometry, then inspect registration and completeness.</p></li>
+          <li><span class="step-number">04</span><h3>Analyze and report</h3><p>Connect segmentation to 3D geometry and present supported measurements with uncertainty.</p></li>
+        </ol>
+      </section>
+
+      <aside class="safety-note">
+        <strong>Safe capture matters.</strong>
+        <span>Never approach an active landslide or unstable slope for imagery. This project is an experimental analysis tool, not an early-warning system or a substitute for a qualified assessment.</span>
+      </aside>
+    </main>
+
+    <footer><span>Terra Sight</span><span>Built around reproducible results and honest limitations.</span></footer>
+  </body>
+</html>
