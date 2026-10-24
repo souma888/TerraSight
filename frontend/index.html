@@ -1,53 +1,201 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#17251f">
-    <meta name="description" content="Terra Sight turns terrain imagery into quality-checked 3D analysis.">
-    <title>Terra Sight — Terrain capture and analysis</title>
-    <link rel="stylesheet" href="/styles.css">
-    <script src="/app.js" defer></script>
-  </head>
-  <body>
-    <header class="site-header">
-      <a class="brand" href="/" aria-label="Terra Sight home">
-        <span class="brand-mark" aria-hidden="true">TS</span>
-        <span>Terra Sight</span>
-      </a>
-      <span class="status" id="api-status" role="status">Checking API…</span>
-    </header>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f5ef">
+  <meta name="description" content="Terra Sight helps you capture and prepare terrain imagery for 3D reconstruction.">
+  <title>Terra Sight — Terrain capture workspace</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Terra Sight home">
+      <img src="/favicon.svg" width="38" height="38" alt="">
+      <span class="brand-copy"><strong>Terra Sight</strong><small>FIELDWORK · 3D TERRAIN</small></span>
+    </a>
+    <nav class="topnav" aria-label="Main navigation">
+      <a class="active" href="#capture">Workspace</a>
+      <a href="#pipeline">How it works</a>
+      <a href="#project">Project</a>
+    </nav>
+    <div class="api-pill"><i id="api-dot"></i><span id="api-status" role="status">Connecting</span></div>
+  </header>
 
-    <main>
-      <section class="hero">
-        <p class="eyebrow">Terrain capture · 3D reconstruction · measured results</p>
-        <h1>Understand the ground<br><span>from the images you capture.</span></h1>
-        <p class="intro">Terra Sight is being built to help assess terrain photo coverage, reconstruct a 3D scene, and report measurements with clear quality limits.</p>
-        <div class="actions">
-          <a class="button button-primary" href="#workflow">Explore the workflow</a>
-          <span class="phase-label">Project foundation · phase 1</span>
+  <main>
+    <section class="page-intro">
+      <div>
+        <p class="overline"><span class="overline-dot"></span> TERRAIN IMAGING WORKSPACE <span class="overline-divider">/</span> 01</p>
+        <h1>See the whole slope.</h1>
+        <p class="intro-copy">Bring your terrain photos together, check capture coverage, and prepare a scene for 3D reconstruction.</p>
+      </div>
+      <a class="text-link" href="#safety">Capture guidance <span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="workspace" id="capture" aria-label="Terrain image capture and upload">
+      <div class="capture-panel panel">
+        <div class="panel-heading">
+          <div><p class="eyebrow">CAPTURE SESSION</p><h2>Build your image set</h2></div>
+          <span class="session-chip"><i></i> LOCAL SESSION</span>
         </div>
-      </section>
 
-      <section class="workflow" id="workflow" aria-labelledby="workflow-title">
-        <div class="section-heading">
-          <p class="eyebrow">Planned pipeline</p>
-          <h2 id="workflow-title">From capture to evidence</h2>
+        <div class="source-switch" role="tablist" aria-label="Choose image source">
+          <button class="source-tab selected" id="tab-camera" role="tab" aria-selected="true" aria-controls="camera-source" type="button"><span class="tab-icon">◎</span> Live camera</button>
+          <button class="source-tab" id="tab-upload" role="tab" aria-selected="false" aria-controls="upload-source" type="button"><span class="tab-icon">↥</span> Choose photos</button>
         </div>
-        <ol class="steps">
-          <li><span class="step-number">01</span><h3>Capture or upload</h3><p>Use existing photos or follow guided capture in a mobile browser.</p></li>
-          <li><span class="step-number">02</span><h3>Check readiness</h3><p>Assess image quality, feature matches, viewpoint diversity, and likely coverage gaps.</p></li>
-          <li><span class="step-number">03</span><h3>Reconstruct</h3><p>Estimate camera poses and build terrain geometry, then inspect registration and completeness.</p></li>
-          <li><span class="step-number">04</span><h3>Analyze and report</h3><p>Connect segmentation to 3D geometry and present supported measurements with uncertainty.</p></li>
-        </ol>
-      </section>
 
-      <aside class="safety-note">
-        <strong>Safe capture matters.</strong>
-        <span>Never approach an active landslide or unstable slope for imagery. This project is an experimental analysis tool, not an early-warning system or a substitute for a qualified assessment.</span>
+        <div class="capture-source" id="camera-source" role="tabpanel" aria-labelledby="tab-camera">
+          <div class="camera-frame" id="camera-frame">
+            <video id="camera-video" autoplay playsinline muted aria-label="Live camera preview"></video>
+            <canvas id="capture-canvas" hidden></canvas>
+            <div class="camera-placeholder" id="camera-placeholder">
+              <div class="placeholder-symbol" aria-hidden="true">
+                <svg viewBox="0 0 80 80"><path d="M11 25h13l6-8h20l6 8h13a5 5 0 0 1 5 5v29a5 5 0 0 1-5 5H11a5 5 0 0 1-5-5V30a5 5 0 0 1 5-5Z"/><circle cx="40" cy="44" r="13"/><path d="M58 34h.1"/></svg>
+              </div>
+              <strong>Ready when you are</strong>
+              <span>Start the rear camera and frame the full slope from a safe viewpoint.</span>
+              <span class="secure-note">Camera access requires HTTPS or localhost</span>
+            </div>
+            <div class="camera-guides" aria-hidden="true">
+              <div class="guide-frame"><i></i><i></i><i></i><i></i></div>
+              <div class="guide-grid"></div>
+              <div class="horizon-line"><span>KEEP HORIZON LEVEL</span></div>
+              <div class="aim-reticle"><i></i></div>
+              <div class="footprint"><i></i><i></i><i></i></div>
+            </div>
+            <div class="camera-topline">
+              <span class="live-label"><i id="live-dot"></i><b id="live-text">CAMERA OFF</b></span>
+              <span class="lens-label" id="lens-label">REAR LENS</span>
+              <button class="icon-button flip-button" id="flip-camera" type="button" aria-label="Switch between front and rear camera" title="Switch camera" disabled>↻</button>
+            </div>
+            <div class="guidance-cue" id="guidance-cue">
+              <span class="cue-arrow" id="direction-arrow">◎</span>
+              <span class="cue-copy"><small>NEXT VIEW · <b id="angle-value">START</b></small><strong id="direction-text">Choose a starting point</strong></span>
+              <span class="cue-step" id="shot-count">00 <small>/ 05</small></span>
+            </div>
+            <div class="overlap-card" id="overlap-card">
+              <span class="overlap-ring">↔</span>
+              <span class="overlap-copy"><small>OVERLAP WITH LAST VIEW</small><strong id="overlap-value">Waiting for first photo</strong></span>
+              <span class="overlap-meter"><i id="overlap-bar"></i></span>
+            </div>
+            <div class="camera-error" id="camera-error" role="alert" hidden></div>
+          </div>
+
+          <div class="capture-controls">
+            <button class="button button-secondary" id="start-camera" type="button"><span class="button-icon">◉</span> Start camera</button>
+            <button class="button button-shutter" id="take-photo" type="button" disabled><span class="shutter"></span> Capture view</button>
+          </div>
+          <div class="capture-hint"><span class="hint-mark">↔</span><span id="guidance-message">Move sideways in short steps between views. Keep recognizable terrain features in frame.</span></div>
+        </div>
+
+        <div class="capture-source upload-source" id="upload-source" role="tabpanel" aria-labelledby="tab-upload" hidden>
+          <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple hidden>
+          <button class="dropzone" id="dropzone" type="button">
+            <span class="upload-icon">↥</span>
+            <strong>Drop terrain photos here</strong>
+            <span>or browse your device storage</span>
+            <span class="file-spec">JPG · PNG · WEBP · select multiple images</span>
+          </button>
+          <p class="upload-privacy"><span>◇</span> Photos are held in this browser session and are not uploaded yet.</p>
+        </div>
+      </div>
+
+      <aside class="session-panel panel" aria-label="Photo set and capture progress">
+        <div class="panel-heading session-heading">
+          <div><p class="eyebrow">YOUR SESSION</p><h2>Capture overview</h2></div>
+          <button class="icon-button clear-button" id="clear-photos" type="button" aria-label="Remove all photos" title="Clear photo set" hidden>×</button>
+        </div>
+
+        <div class="coverage-block">
+          <div class="coverage-title"><span>IMAGE SET</span><strong id="photo-count">0 <small>/ 5 minimum</small></strong></div>
+          <div class="progress-track"><i id="progress-bar"></i></div>
+          <div class="coverage-foot"><span id="progress-text">Add at least five overlapping views</span><span class="target-tag">TARGET ≥70%</span></div>
+        </div>
+
+        <div class="photo-list-heading"><span>CAPTURED VIEWS</span><span id="photo-summary">No photos yet</span></div>
+        <div class="photo-grid" id="thumbnail-grid" aria-live="polite">
+          <div class="empty-photo"><span>＋</span><small>View 01</small></div>
+          <div class="empty-photo"><span>＋</span><small>View 02</small></div>
+          <div class="empty-photo"><span>＋</span><small>View 03</small></div>
+          <div class="empty-photo"><span>＋</span><small>View 04</small></div>
+          <div class="empty-photo"><span>＋</span><small>View 05</small></div>
+          <div class="empty-photo optional"><span>＋</span><small>More</small></div>
+        </div>
+
+        <div class="session-actions">
+          <button class="button button-outline" id="add-photos" type="button"><span>＋</span> Add photos</button>
+          <button class="button button-text" id="check-readiness" type="button" disabled>Check readiness <span>→</span></button>
+        </div>
+        <button class="button download-button" id="download-set" type="button" disabled>Save photo set (.zip) <span>↓</span></button>
+
+        <div class="readiness-box" id="readiness-box">
+          <span class="readiness-icon" id="readiness-icon">✳</span>
+          <div><strong id="readiness-title">Ready to get started?</strong><p id="readiness-detail">Add images to review resolution, sharpness and visual overlap.</p></div>
+        </div>
+
+        <button class="button button-primary reconstruct-button" id="reconstruct-button" type="button" disabled><span>Prepare 3D reconstruction</span><span>↗</span></button>
+        <p class="backend-note" id="backend-note">Photo intake is local. Reconstruction processing is not connected yet.</p>
       </aside>
-    </main>
+    </section>
 
-    <footer><span>Terra Sight</span><span>Built around reproducible results and honest limitations.</span></footer>
-  </body>
+    <section class="output-section" id="project">
+      <div class="output-copy">
+        <p class="eyebrow">NEXT · 3D RECONSTRUCTION</p>
+        <h2>From overlapping views<br>to a measured scene.</h2>
+        <p>Terra Sight is designed to turn a well-covered image set into a registered 3D terrain model, with visible quality checks at every stage.</p>
+        <div class="output-status"><span class="status-symbol">◌</span><span><strong>Reconstruction workspace</strong><small>Preparing the processing pipeline</small></span><span class="status-badge">IN DEVELOPMENT</span></div>
+      </div>
+      <div class="terrain-visual" aria-label="Illustration of a terrain surface and camera positions">
+        <div class="terrain-coordinate coord-one">CAM 01</div><div class="terrain-coordinate coord-two">CAM 02</div><div class="terrain-coordinate coord-three">CAM 03</div>
+        <svg class="terrain-svg" viewBox="0 0 640 390" role="img" aria-label="Illustrated terrain surface with overlapping capture paths">
+          <defs>
+            <linearGradient id="terrainFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e3e9d7"/><stop offset=".58" stop-color="#c6d1b7"/><stop offset="1" stop-color="#9cac88"/></linearGradient>
+            <linearGradient id="terrainShade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".48"/><stop offset="1" stop-color="#668061" stop-opacity=".05"/></linearGradient>
+          </defs>
+          <path d="M70 245 172 138l80 33 97-90 89 61 121-48v155l-116 63-100-33-110 55-88-46-75 27Z" fill="url(#terrainFill)" stroke="#738769" stroke-width="1.5"/>
+          <path d="m70 245 102-107 80 33 97-90 89 61 121-48v155l-116 63-100-33-110 55-88-46-75 27Z" fill="url(#terrainShade)"/>
+          <g fill="none" stroke="#7e906e" stroke-width="1.1" opacity=".9">
+            <path d="M93 235c57-13 93-56 122-81 30-25 48 4 73 5 39 1 57-79 99-77 26 1 33 45 64 57 29 10 58-18 90-22"/>
+            <path d="M105 249c53-9 91-45 119-69 35-29 51 3 76 2 43-1 59-69 96-70 28-1 39 42 68 49 28 7 53-16 79-22"/>
+            <path d="M123 263c46-4 84-36 111-56 39-29 57 1 82-1 43-4 58-57 95-61 30-4 45 36 70 40 24 4 46-13 67-20"/>
+            <path d="M147 278c41 1 72-25 101-45 38-27 57-2 83-4 45-3 60-47 94-52 29-5 47 28 69 31 24 3 42-10 61-18"/>
+            <path d="M177 292c31 4 56-18 81-35 38-25 61-7 86-9 43-3 57-39 90-44 30-4 49 23 70 26"/>
+          </g>
+          <g fill="none" stroke="#436b58" stroke-width="1.5" stroke-dasharray="5 6" opacity=".9">
+            <path d="M124 111c67-43 147-48 221-10 67 35 127 40 199 6"/>
+            <path d="M140 130c68-39 140-41 207-7 66 34 130 39 181 12"/>
+          </g>
+          <g fill="#f8f8f2" stroke="#315c49" stroke-width="2">
+            <circle cx="124" cy="111" r="8"/><circle cx="345" cy="100" r="8"/><circle cx="544" cy="107" r="8"/>
+          </g>
+        </svg>
+        <div class="terrain-caption"><span>SCENE PREVIEW</span><span>ILLUSTRATIVE · NO RECONSTRUCTION YET</span></div>
+      </div>
+    </section>
+
+    <section class="pipeline-section" id="pipeline">
+      <div class="section-title"><div><p class="eyebrow">A TRANSPARENT PROCESS</p><h2>Every step earns the next.</h2></div><p>Capture quality sets the ceiling for everything that follows. Terra Sight makes those limits visible.</p></div>
+      <ol class="pipeline-grid">
+        <li><span class="pipeline-number">01</span><span class="pipeline-icon">⌖</span><h3>Capture or upload</h3><p>Collect overlapping viewpoints from safe, stable ground.</p><span class="pipeline-state">YOU ARE HERE</span></li>
+        <li><span class="pipeline-number">02</span><span class="pipeline-icon">⌁</span><h3>Check coverage</h3><p>Review resolution, sharpness, image overlap and viewpoint variety.</p><span class="pipeline-state">READINESS REVIEW</span></li>
+        <li><span class="pipeline-number">03</span><span class="pipeline-icon">◇</span><h3>Reconstruct in 3D</h3><p>Estimate camera positions and build geometry from matched features.</p><span class="pipeline-state">PROCESSING PIPELINE</span></li>
+        <li><span class="pipeline-number">04</span><span class="pipeline-icon">◫</span><h3>Analyze and report</h3><p>Show supported measurements with uncertainty and quality evidence.</p><span class="pipeline-state">RESULTS & REPORT</span></li>
+      </ol>
+    </section>
+
+    <section class="safety-section" id="safety">
+      <div class="safety-icon">!</div>
+      <div><p class="eyebrow">FIELD SAFETY FIRST</p><h2>Keep your distance. Let the camera do the work.</h2><p>Capture only from safe, stable ground. Never approach an active landslide, an unstable slope or an exposed edge to improve image coverage. Terra Sight is an experimental analysis tool, not an early-warning system or a replacement for a qualified geotechnical assessment.</p></div>
+      <a href="https://github.com/souma888/Camera_Guidance" target="_blank" rel="noreferrer">Camera guidance principles <span>↗</span></a>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <a class="brand footer-brand" href="/"><img src="/favicon.svg" width="30" height="30" alt=""><span class="brand-copy"><strong>Terra Sight</strong><small>TERRAIN IMAGING WORKSPACE</small></span></a>
+    <span>Built around reproducible results and honest limits.</span><a href="#capture">Back to workspace ↑</a>
+  </footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
 </html>

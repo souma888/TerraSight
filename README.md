@@ -59,4 +59,4 @@ See [docs/architecture.md](docs/architecture.md), [docs/roadmap.md](docs/roadmap
 
 ## Current status
 
-This commit is the runnable project foundation only: a health endpoint and static frontend shell. Reconstruction, segmentation, image validation, uploads, reports, and deployment are not implemented yet.
+The browser workspace now supports selecting multiple local terrain images, mobile camera capture, capture movement cues, an approximate visual overlap estimate, a local photo gallery and ZIP export, and first-pass browser-side readiness checks. The overlap estimate is a capture aid, not a geometric measurement. Files remain in the current browser session. Server-side upload/storage, reconstruction, segmentation, quantitative validation, and report generation are still to be implemented; the 3D preview is illustrative.
