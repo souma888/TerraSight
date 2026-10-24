@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import torch
 from sklearn.metrics import f1_score, jaccard_score
+from torch import nn
 from torch.utils.data import DataLoader, Dataset, random_split
 
 from backend.app.services.postprocess import build_terrain_model
