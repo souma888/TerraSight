@@ -3,6 +3,13 @@ name = "terra-sight"
 version = "0.1.0"
 description = "Terrain capture readiness and 3D analysis platform."
 requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "uvicorn[standard]>=0.30,<1.0",
+    "python-multipart>=0.0.9",
+    "numpy>=1.26,<3.0",
+    "opencv-python-headless>=4.10,<5.0",
+]
 
 [tool.vercel]
 entrypoint = "backend.app.main:app"
