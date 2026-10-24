@@ -29,6 +29,7 @@
   let facingHeading = null;
   let orientationEnabled = false;
   let toastTimer = null;
+  let qualityReviewed = false;
 
   const $ = (selector) => document.querySelector(selector);
 
@@ -52,6 +53,83 @@
     toast.classList.add('visible');
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => toast.classList.remove('visible'), 3600);
+  }
+
+  const viewTitles = { capture: 'Capture studio', library: 'Image library', quality: 'Capture quality', scene: '3D scene', guide: 'Field guide' };
+
+  function switchView(view) {
+    if (!viewTitles[view]) return;
+    document.querySelectorAll('[data-view-panel]').forEach((panel) => {
+      const active = panel.dataset.viewPanel === view;
+      panel.hidden = !active;
+      panel.classList.toggle('active', active);
+    });
+    document.querySelectorAll('.side-link,.mobile-nav-link').forEach((button) => {
+      const active = button.dataset.nav === view;
+      button.classList.toggle('active', active);
+      if (active) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    $('#active-view-title').textContent = viewTitles[view];
+    if (view !== 'capture') stopCamera();
+    if (view === 'library') renderLibrary();
+    if (view === 'quality') updateQuality();
+    $('#mobile-nav').classList.remove('open');
+  }
+
+  function renderLibrary() {
+    const grid = $('#library-grid');
+    if (!grid) return;
+    grid.replaceChildren();
+    $('#library-count').textContent = photos.length + (photos.length === 1 ? ' photo' : ' photos');
+    $('#library-export').disabled = photos.length === 0;
+    if (!photos.length) {
+      grid.innerHTML = '<div class="library-empty"><span>▧</span><h3>Your image library is ready</h3><p>Add slope photos or capture views on your phone. They will appear here for review.</p><button class="button button-primary" type="button" data-nav="capture">Add the first images</button></div>';
+      return;
+    }
+    photos.forEach((photo, index) => {
+      const card = document.createElement('article');
+      card.className = 'library-card';
+      const image = document.createElement('img'); image.src = photo.url; image.alt = 'Terrain view ' + (index + 1);
+      const meta = document.createElement('div'); meta.className = 'library-card-meta';
+      const title = document.createElement('strong'); title.textContent = 'View ' + String(index + 1).padStart(2, '0');
+      const detail = document.createElement('span'); detail.textContent = photo.width + ' × ' + photo.height + ' · ' + (photo.source === 'camera' ? 'Camera' : 'Library');
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'small-link'; remove.textContent = 'Remove'; remove.addEventListener('click', () => removePhoto(index));
+      meta.append(title, detail, remove); card.append(image, meta); grid.append(card);
+    });
+  }
+
+  function setChecklist(name, state, text) {
+    const item = $('#check-' + name);
+    if (!item) return;
+    item.classList.toggle('is-good', state === true);
+    item.classList.toggle('is-caution', state === false);
+    const status = item.querySelector('.check-status');
+    if (status) status.textContent = text;
+  }
+
+  function updateQuality() {
+    const count = photos.length;
+    const large = photos.filter((photo) => photo.width >= 1280 && photo.height >= 720).length;
+    const overlaps = photos.slice(1).map((photo) => photo.overlap).filter((value) => value != null);
+    const average = overlaps.length ? Math.round(overlaps.reduce((sum, value) => sum + value, 0) / overlaps.length) : null;
+    $('#quality-count').innerHTML = count + ' <small>/ ' + MIN_PHOTOS + ' suggested</small>';
+    $('#quality-resolution').textContent = count ? large + ' / ' + count : '—';
+    $('#quality-overlap').textContent = average == null ? '—' : average + '%';
+    $('#quality-count-bar').style.width = Math.min(100, count / MIN_PHOTOS * 100) + '%';
+    $('#quality-resolution-bar').style.width = count ? (large / count * 100) + '%' : '0%';
+    $('#quality-overlap-bar').style.width = average == null ? '0%' : Math.min(100, average) + '%';
+    $('#check-count').classList.toggle('is-good', count >= MIN_PHOTOS);
+    $('#check-resolution').classList.toggle('is-good', count > 0 && large >= Math.min(3, count));
+    $('#check-overlap').classList.toggle('is-good', average != null && average >= TARGET_OVERLAP);
+    $('#check-count').classList.toggle('is-caution', count < MIN_PHOTOS);
+    $('#check-resolution').classList.toggle('is-caution', count > 0 && large < Math.min(3, count));
+    $('#check-overlap').classList.toggle('is-caution', average != null && average < TARGET_OVERLAP);
+    $('#quality-title').textContent = count === 0 ? 'Your review is waiting.' : count >= MIN_PHOTOS && large >= Math.min(3, count) && average != null && average >= TARGET_OVERLAP ? 'Your image set is looking promising.' : 'Your capture set is taking shape.';
+    $('#check-count').querySelector('.check-status').textContent = count >= MIN_PHOTOS ? 'Minimum reached' : 'Add more views';
+    $('#check-resolution').querySelector('.check-status').textContent = count ? (large >= Math.min(3, count) ? 'Suitable dimensions' : 'Use larger images') : 'Awaiting images';
+    $('#check-overlap').querySelector('.check-status').textContent = average == null ? 'Add sequential views' : average >= TARGET_OVERLAP ? 'Target ≥70%' : 'Aim for ≥70%';
+    $('#quality-summary').textContent = count === 0 ? 'Add images to see a live assessment of this survey.' : qualityReviewed ? 'Review based on images currently in this session. Browser-side estimate only.' : 'Live preview from images in this session. Run a review for a fuller assessment.';
   }
 
   function decodeImage(file) {
@@ -189,8 +267,11 @@
     $('#progress-text').textContent = count >= MIN_PHOTOS ? 'Minimum image count reached' : 'Add ' + (MIN_PHOTOS - count) + ' more ' + (MIN_PHOTOS - count === 1 ? 'view' : 'views');
     $('#clear-photos').hidden = count === 0;
     $('#check-readiness').disabled = count === 0;
+    $('#run-quality-check').disabled = count === 0;
     $('#reconstruct-button').disabled = count < MIN_PHOTOS;
     document.querySelector('#download-set').disabled = count === 0;
+    $('#nav-photo-count').textContent = String(count);
+    $('#heading-session-status').textContent = count ? count + (count === 1 ? ' view captured' : ' views captured') : 'Waiting for images';
     thumbnailGrid.replaceChildren();
     const shownSlots = count > MIN_PHOTOS ? count : MIN_PHOTOS + 1;
     for (let index = 0; index < shownSlots; index += 1) {
@@ -224,6 +305,8 @@
     }
     nextCue();
     updateOverlap(null, count === 0);
+    renderLibrary();
+    updateQuality();
   }
 
   function removePhoto(index) {
@@ -234,6 +317,7 @@
   }
 
   function resetReadiness() {
+    qualityReviewed = false;
     const box = $('#readiness-box');
     box.classList.remove('is-ready', 'is-warning');
     $('#readiness-icon').textContent = '✳';
@@ -443,6 +527,8 @@
     const overlapOk = averageOverlap != null && averageOverlap >= TARGET_OVERLAP;
     const countOk = count >= MIN_PHOTOS;
     const ready = countOk && resolutionOk && overlapOk;
+    qualityReviewed = true;
+    updateQuality();
     const caution = countOk && resolutionOk && averageOverlap != null;
     box.classList.toggle('is-ready', ready);
     box.classList.toggle('is-warning', !ready);
@@ -458,8 +544,6 @@
 
   function startReconstruction() {
     notify('The 3D reconstruction service is not connected yet. Photos remain on this device and have not been sent.');
-    $('#backend-note').textContent = 'Backend reconstruction is not available yet; your images remain in this browser.';
-    $('#backend-note').classList.add('is-notice');
   }
 
   function crc32(bytes) {
@@ -546,6 +630,22 @@
   });
   $('#clear-photos').addEventListener('click', clearPhotos);
   $('#check-readiness').addEventListener('click', checkReadiness);
+  $('#run-quality-check').addEventListener('click', checkReadiness);
+  document.addEventListener('click', (event) => {
+    const nav = event.target.closest('[data-nav]');
+    if (nav) switchView(nav.dataset.nav);
+  });
+  $('#mobile-menu').addEventListener('click', () => $('#mobile-nav').classList.toggle('open'));
+  $('#new-session').addEventListener('click', () => {
+    if (photos.length && !window.confirm('Start a new survey and clear the current images?')) return;
+    clearPhotos();
+    switchView('capture');
+  });
+  $('#library-add').addEventListener('click', () => { switchView('capture'); $('#tab-upload').click(); fileInput.click(); });
+  $('#library-export').addEventListener('click', downloadPhotoSet);
+  $('#quality-count-bar').style.width = '0%';
+  $('#quality-resolution-bar').style.width = '0%';
+  $('#quality-overlap-bar').style.width = '0%';
   $('#reconstruct-button').addEventListener('click', startReconstruction);
   document.querySelector('#download-set').addEventListener('click', downloadPhotoSet);
   window.addEventListener('pagehide', () => {
