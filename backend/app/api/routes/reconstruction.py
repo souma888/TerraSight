@@ -12,6 +12,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
 from backend.app.services import reconstruction as engine
+from backend.app.services import postprocess
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/reconstructions", tags=["COLMAP reconstruction"])
@@ -21,6 +22,12 @@ ALLOWED_TYPES = {"image/jpeg", "image/png"}
 @router.get("/capabilities")
 def reconstruction_capabilities() -> dict[str, object]:
     return engine.capabilities()
+
+
+@router.get("/postprocess/capabilities")
+def postprocess_capabilities() -> dict[str, object]:
+    """Report optional local analysis support without importing heavy packages at startup."""
+    return postprocess.capabilities()
 
 
 @router.post("", status_code=202)
@@ -111,6 +118,55 @@ async def validate_scale(job_id: UUID, baselines_csv: Annotated[UploadFile, File
         raise HTTPException(status_code=422, detail=str(error)) from error
     finally:
         await baselines_csv.close()
+
+
+@router.post("/{job_id}/geometry", status_code=202)
+def start_geometry(job_id: UUID) -> dict[str, object]:
+    try:
+        return postprocess.start_geometry(str(job_id))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{job_id}/geometry")
+def geometry_status(job_id: UUID) -> dict[str, object]:
+    try:
+        return postprocess.geometry_status(str(job_id))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.post("/{job_id}/segmentation", status_code=202)
+def start_segmentation(job_id: UUID) -> dict[str, object]:
+    try:
+        return postprocess.start_segmentation(str(job_id))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (ValueError, RuntimeError) as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{job_id}/segmentation")
+def segmentation_status(job_id: UUID) -> dict[str, object]:
+    try:
+        return postprocess.segmentation_status(str(job_id))
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{job_id}/segmentation/{name}")
+def segmentation_asset(job_id: UUID, name: str) -> FileResponse:
+    try:
+        path = postprocess.segmentation_asset_path(str(job_id), name)
+    except FileNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return FileResponse(path, media_type="image/png" if path.suffix == ".png" else "image/jpeg", filename=path.name)
 
 
 @router.get("/{job_id}/artifacts/{name}")

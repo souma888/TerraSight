@@ -497,6 +497,7 @@ def artifact_path(job_id: str, name: str) -> Path:
     allowed = {
         "sparse.ply", "dense.ply", "sparse-metric.ply", "dense-metric.ply",
         "camera-positions.csv", "diagnostics.json", "scale-validation.json", "colmap.log",
+        "cleaned-point-cloud.ply", "viewer-point-cloud.json", "geometry-analysis.json", "segmentation-report.json",
     }
     if name not in allowed:
         raise FileNotFoundError("Unknown reconstruction artifact.")

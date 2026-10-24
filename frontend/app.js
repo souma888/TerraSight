@@ -703,6 +703,7 @@
     $('#scale-validation').hidden = false;
     $('#scale-template-link').href = '/api/reconstructions/' + encodeURIComponent(job.job_id) + '/scale-template.csv';
     currentReconstructionJob = job.job_id;
+    window.dispatchEvent(new CustomEvent('terrasight:reconstruction-ready', { detail: { jobId: job.job_id, summary } }));
   }
 
   async function pollReconstruction(jobId) {

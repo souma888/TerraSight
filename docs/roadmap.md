@@ -31,12 +31,16 @@ Flexible timeline; milestones are defined by usable evidence and deliverables ra
 ## 5. Landslide segmentation
 
 - Choose a documented label taxonomy and prepare public-data baseline.
-- Compare model candidates and evaluate by held-out site/event.
+- [x] Add a reproducible PyTorch binary-mask baseline trainer with an 80/20 split and scikit-learn IoU/F1 reporting.
+- [x] Add local checkpoint inference with per-image mask/overlay output.
+- [ ] Compare model candidates and evaluate by held-out site/event.
 - Deliverable: evaluated model with per-class IoU, precision, recall, and limitations.
 
 ## 6. 3D analysis
 
-- Map image masks to reconstructed geometry where supported.
+- [x] Add Open3D statistical filtering, bounding-box diagnostics, downloadable clean PLY, and a sampled point-cloud export.
+- [x] Add a Three.js point-cloud viewer in the local workspace.
+- [ ] Map image masks to reconstructed geometry where supported.
 - Add measured dimensions and a reference-surface method for volume.
 - Deliverable: measurements checked against known references, with quality-based withholding.
 
