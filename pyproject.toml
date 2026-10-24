@@ -1,0 +1,10 @@
+[project]
+name = "terra-sight"
+version = "0.1.0"
+description = "Terrain capture readiness and 3D analysis platform."
+requires-python = ">=3.12"
+
+# Vercel uses this entry point because the ASGI app lives outside its
+# default FastAPI entry-point locations.
+[project.scripts]
+app = "backend.app.main:app"
